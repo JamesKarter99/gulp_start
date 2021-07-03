@@ -23,19 +23,21 @@ const distPath = 'dist/';
 const path = {
     // пути к файлам готового проекта
     build: {
-        html:   distPath,
-        js:     distPath + 'assets/js/',
-        css:    distPath + 'assets/css/',
-        images: distPath + 'assets/images/',
-        fonts:  distPath + "assets/fonts/"
+        html:         distPath,
+        js:           distPath + 'assets/js/',
+        css:          distPath + 'assets/css/',
+        cssBlocks:    distPath + 'assets/css/blocks',
+        images:       distPath + 'assets/images/',
+        fonts:        distPath + "assets/fonts/"
     },
     // пути к исходникам
     src: {
-        html:   srcPath + '*.html',
-        js:     srcPath + 'assets/js/*.js',
-        css:    srcPath + 'assets/scss/*.scss',
-        images: srcPath + 'assets/images/**/*.{ipg,png,svg,gif,ico,webp,webmanifest,xml,json}',
-        fonts:  srcPath + 'assets/fonts/**/*.{eot,woff,woff2,ttf,svg}'
+        html:         srcPath + '*.html',
+        js:           srcPath + 'assets/js/*.js',
+        css:          srcPath + 'assets/scss/*.scss',
+        cssBlocks:    srcPath + 'assets/scss/blocks/*.scss',
+        images:       srcPath + 'assets/images/**/*.{ipg,png,svg,gif,ico,webp,webmanifest,xml,json}',
+        fonts:        srcPath + 'assets/fonts/**/*.{eot,woff,woff2,ttf,svg}'
     },
     // пути для отслеживания изменений
     watch: {
@@ -99,30 +101,41 @@ function css() {
     .pipe(dest(path.build.css))
     .pipe(browserSync.reload({stream: true}));
 }
-// обработка scss - РАЗРАБОТКА
-function cssWatch() {
-    return src(path.src.css, {base: srcPath + 'assets/scss/'})
-        .pipe(plumber({
-            errorHandler : function(err) {
-                notify.onError({
-                    title:    "SCSS Error",
-                    message:  "Error: <%= error.message %>"
-                })(err);
-                this.emit('end');
-            }
-        }))
-        .pipe(sass())
-        .pipe(cssbeautify())
-        .pipe(rename({
-            suffix: ".min",
-            extname: ".css"
-        }))
-        .pipe(dest(path.build.css))
-        .pipe(browserSync.reload({stream: true}));
+
+// обработка scss - КОМПИЛИРОВАНИЕ ОТДЕЛЬНЫХ ФАЙЛОВ ы dist/blocks
+function cssBlocks() {
+    return src(path.src.cssBlocks, {base: srcPath + 'assets/scss/'})
+    .pipe(plumber({
+        errorHandler : function(err) {
+            notify.onError({
+                title:    "SCSS Error",
+                message:  "Error: <%= error.message %>"
+            })(err);
+            this.emit('end');
+        }
+    }))
+    .pipe(sass())
+    .pipe(autoprefixer({
+        cascade: true
+    }))
+    .pipe(cssbeautify())
+    .pipe(dest(path.build.cssBlocks))
+    .pipe(cssnano({
+        zindex: false,
+        discardComments: {
+            removeAll: true
+        }
+    }))
+    .pipe(removeComments())
+    .pipe(rename({
+        suffix: ".min",
+        extname: ".css"
+    }))
+    .pipe(dest(path.build.cssBlocks))
+    .pipe(browserSync.reload({stream: true}));
 }
 
 // JS
-// todo добавить webpack
 function js() {
     return src(path.src.js)
         .pipe(plumber({
@@ -137,7 +150,6 @@ function js() {
         .pipe(dest(path.build.js))
         .pipe(browserSync.reload({stream: true}));
 }
-
 
 // IMAGES & FONTS
 function images() {
@@ -178,16 +190,25 @@ function watchFiles() {
     gulp.watch([path.watch.fonts],  fonts);
 }
 
-const build = gulp.series(clean, gulp.parallel(html, css, js, images, fonts));
+const build = gulp.series(clean, gulp.parallel(html, css, cssBlocks, js, images, fonts));
 const watch = gulp.parallel(build, watchFiles, serve);
 
 // EXPORT
-exports.html    = html;
-exports.css     = css;
-exports.js      = js;
-exports.images  = images;
-exports.fonts   = fonts;
-exports.clean   = clean;
-exports.build   = build;
-exports.watch   = watch;
-exports.default = watch;
+exports.html          = html;
+exports.css           = css;
+exports.cssBlocks     = cssBlocks;
+exports.js            = js;
+exports.images        = images;
+exports.fonts         = fonts;
+exports.clean         = clean;
+exports.build         = build;
+exports.watch         = watch;
+exports.default       = watch;
+
+/*
+* css - компилирует все файлы scss и собирает их в общий файл dist/assets/css/style.css + минифицированная версия так же сохраняется
+
+* cssBlocks - выполняет компиляцию scss-файлов в папке src/assets/blocks и сохраняет их в отдельную директория blocks в dist/assets/css, сохраняя исходную структуру каталогов. Сохраняются так же и минифицированные версии файлов. Это нужно для того, чтобы не импортировать в Django-шаблоны весь код css, а только необходимые свойства. 
+! чтобы файлы скомпилировались кооректно, необходимо в каждом файле в директории dist/assets/blocks делать импорт 'vars.scss'.
+
+*/
